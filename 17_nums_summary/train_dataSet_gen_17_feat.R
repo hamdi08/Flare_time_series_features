@@ -1,0 +1,281 @@
+###Feature set 2; 17 features for each time series
+
+#library(impute)
+#library(e1071)
+
+
+#Labeled time series files of release 3, 828 training mts and 410 testing mts 
+train_mts_dir <- "/home/hamdi/GSU/Spring17/ADM/proj/After_spring/Features_expt/data/train_828_rel3_L12S24/" 
+#a directory for training vector data; make before running
+train_vec_data_dir <- "/home/hamdi/GSU/Spring17/ADM/proj/After_spring/Features_expt/data/" 
+#metadata directory inside training vector data directory; make before running
+#train_meta_data_dir <- "/home/hamdi/GSU/Spring17/ADM/proj/data/train_vec_data/meta_data/" 
+#directory for 2480 unlabeled test time series
+test_mts_dir <- "/home/hamdi/GSU/Spring17/ADM/proj/After_spring/Features_expt/data/test_410_rel3_L12S24/" 
+#directory for the generated test vector data
+test_vec_data_dir <- "/home/hamdi/GSU/Spring17/ADM/proj/After_spring/Features_expt/data/" 
+#all data dir
+data_dir <- "/home/hamdi/GSU/Spring17/ADM/proj/After_spring/Features_expt/data/"
+
+setwd(train_mts_dir)
+
+quad_weighted_avg <- function(x)
+{
+  n = length(x)
+  w_sum = 0
+  for (i in 1:n) {
+    w_sum = w_sum + i^2 * x[i]
+  }
+  qwa = (6/(n*(n+1)*(2*n+1)))*w_sum
+  return(qwa)
+}
+
+avg_abs_change <- function(x)
+{
+  n = length(x)
+  a_a_c_sum = 0
+  for (i in 1:(n-1)) {
+    a_a_c_sum = a_a_c_sum + abs(x[i]-x[i+1])
+  }
+  a_a_c <- a_a_c_sum/n
+  return(a_a_c)
+}
+
+der_avg_abs_change <- function(x)
+{
+  n <- length(x)
+  D <- 1
+  temp_ts <- numeric(length(x) - D)
+  for (j in 1:length(temp_ts)) {
+    temp_ts[j] <- x[j + D] - x[j]
+  }
+
+  der_sum = 0
+  for (i in 1:(length(temp_ts)-1)) {
+    der_sum = der_sum + abs(temp_ts[i] - temp_ts[i+1])
+  }
+  d_a_a_c <- der_sum/n
+  return(d_a_a_c)
+}
+frac_pos <- function(x)
+{
+  n <- length(x)
+  pos_bool <- x > 0
+  return(sum(pos_bool)/n)
+}
+
+frac_neg <- function(x)
+{
+  n <- length(x)
+  neg_bool <- x < 0
+  return(sum(neg_bool)/n)
+}
+
+sum_last_K_hours <- function(x)
+{
+  k <- 6 # 6 hours
+  tsk <- x[(length(x)-(k*5)):length(x)]
+  return(sum(tsk))
+}
+
+pos_longest_run <- function(x)
+{
+  boolPos <- x>0
+  if(sum(boolPos) == 0)
+    return(0)
+  else
+  {
+    runs <- rle(boolPos)
+    runs_pos <- runs$lengths[which(runs$values == T)]
+    max_pos_run <- max(runs_pos)
+    return(max_pos_run)
+  }
+}
+
+neg_longest_run <- function(x)
+{
+  boolNeg <- x<0
+  if(sum(boolNeg) == 0)
+    return(0)
+  else
+  {
+    runs <- rle(boolNeg)
+    runs_neg <- runs$lengths[which(runs$values == T)]
+    max_neg_run <- max(runs_neg)
+    return(max_neg_run)
+  }
+  
+}
+
+#################Execution begins #############################################################
+
+lookback <- c(12)
+span <- c(24)
+
+for (l_iter in lookback) {
+  for (s_iter in span) {
+    filePattern <- paste("*Prior", as.character(l_iter), "Span", as.character(s_iter), "class*", sep="")
+    print(filePattern)
+    fs <- list.files(pattern = filePattern)
+    print(length(fs))
+    
+    data_mat <- matrix(data = NA, nrow = length(fs), ncol = 238) # 14*17=238
+    bin_label_vec <- character(length(fs))
+    #mul_label_vec <- character(length(fs))
+  
+    
+    file_iter <- 1
+    for (file_name in fs) {
+      #sprintf("%d : %s", file_iter, file_name)
+      print(file_iter)
+      print(file_name)
+      if(grepl("no", file_name))
+      {
+        bin_label_vec[file_iter] <- "N"
+        #mul_label_vec[file_iter] <- "No_flare"
+      }
+      else
+      {
+        bin_label_vec[file_iter] <- "F"
+        # M, X logic here
+        #if(grepl("X", file_name))
+          #mul_label_vec[file_iter] <- "X"
+        #else
+          #mul_label_vec[file_iter] <- "M"
+        #
+      }
+      mts <- read.csv(file_name, header = T)
+      event_vec <- numeric(0)
+      for (i in 2:15) {
+        ts <- mts[[i]]
+        # ts preprocessing null removal
+        ts <- ts[!is.nan(ts)]
+        n = length(ts)
+        
+        val1 = n
+        val2 = mean(ts)
+        val3 = weighted.mean(ts, 1:n)
+        val4 = quad_weighted_avg(ts)
+        val5 = ts[n]
+        val6 = sd(ts)
+        val7 = avg_abs_change(ts)
+        val8 = der_avg_abs_change(ts)
+        val9 = frac_pos(ts)
+        val10 = frac_neg(ts)
+        val11 = sum_last_K_hours(ts)
+        val12 = pos_longest_run(ts)
+        val13 = neg_longest_run(ts)
+        val14 = max(ts)
+        val15 = which(ts == max(ts))/n
+        val16 = min(ts)
+        val17 = which(ts == min(ts))/n
+        
+        if(length(val17) > 1)
+          val17 = val17[1]
+        if(length(val15) > 1)
+          val15 = val15[1]
+        
+    
+        ts_vec <- c(val1, val2, val3, val4, val5, val6, val7, val8, val9, val10, val11, val12, val13, val14, val15, val16, val17)
+        
+        event_vec <- c(event_vec, ts_vec)
+        if(length(ts_vec) > 17)
+        {
+          print("%%%%%%%%%%%%%%%%%%%%ts_vec%%%%%%%%%%%%%%%%%%%%%%%%")
+          print(ts_vec)
+          print("Length ts_vec")
+          print(length(ts_vec))
+          print("%%%%%%%%%%%%%%%%%%%%event_vec%%%%%%%%%%%%%%%%%%%%%%%%")
+          print(event_vec)
+          print("Length event_vec")
+          print(length(event_vec))
+        }
+      }
+      
+      data_mat[file_iter, ] <- event_vec
+      
+      file_iter <- file_iter + 1
+    }
+    
+    
+    #####Saving mean and sd of each each column of data matrix in separate metadata file; one file for for one Lookback-span constraint; 
+    #purpose: for later z normalization of test data
+    #metadata_mat <- matrix(data = NA, nrow = 2, ncol = 112)
+    
+    #for (mi in 1:112) 
+     # {
+      #  metadata_mat[1, mi] <- mean(data_mat[ ,mi])
+       # metadata_mat[2, mi] <- sd(data_mat[ ,mi])
+      #}
+    
+    #writeMetaFileName <- paste(train_meta_data_dir,"metaData_r123_meanAndSD_Lookback_", as.character(l_iter), "_span_", as.character(s_iter),".csv", sep="")
+    
+    #write.csv(metadata_mat, file = writeMetaFileName, sep = ",", row.names = FALSE, col.names = FALSE)
+    
+    
+    #########z norm using scale function
+    #scaled.data_mat <- scale(data_mat)
+    ########
+    #data_df <- data.frame(scaled.data_mat)
+    #data_df_l <- cbind(data_df, bin_label_vec) #add mul_label_vec if you want 3 class classification
+
+    
+    #####Outlier removal #########
+    #fl_ind <- data_df_l[[113]] == "F"
+    #nfl_ind <- data_df_l[[113]] == "N"
+    
+    #replace each z value > 3 with NA's
+    #for (i in 1:112)  
+    #{
+     # voi <- data_df_l[[i]]
+      #fl_voi <- voi[fl_ind]
+      #nfl_voi <- voi[nfl_ind]
+      #ind_bad_fl <- abs(fl_voi) > 3 
+      #fl_voi[ind_bad_fl] <- NA
+      #ind_bad_nfl <- abs(nfl_voi) > 3
+      #nfl_voi[ind_bad_nfl] <- NA
+      #data_df_l[[i]] <- c(fl_voi, nfl_voi)
+    #}
+    #df_fl_to_impute <- data_df_l[fl_ind, 1:112]
+    #df_nfl_to_impute <- data_df_l[nfl_ind, 1:112]
+    #impute the NA values of flare vectors by 10 nearest neighbor method
+    #cleaned_fls <- impute.knn(as.matrix(df_fl_to_impute), k = 10, rng.seed=362436069)
+    #impute the NA values of non-flare vectors by 10 nearest neighbor method
+    #cleaned_nfls <- impute.knn(as.matrix(df_nfl_to_impute), k = 10, rng.seed=362436069)
+    
+    #combined_df <- data.frame(rbind(cleaned_fls$data, cleaned_nfls$data))
+    #combined_df_l <- cbind(combined_df, bin_label_vec) #add mul_label_vec if you want 3 class
+    
+    data_df <- data.frame(data_mat)
+    data_df_l <- cbind(data_df, bin_label_vec)
+    
+    #14*17 = 238 column titles
+    colnames(data_df_l) <- 
+      c("length_MGT", "mean_MGT", "w_mean_MGT", "q_mean_MGT", "latest_MGT", "sd_MGT", "aac_MGT", "daac_MGT", "fpos_MGT", "fneg_MGT", "sum_last_6h_MGT", "pos_run_MGT", "neg_run_MGT", "max_MGT", "posi_max_MGT", "min_MGT", "posi_min_MGT", 
+        "length_MGH", "mean_MGH", "w_mean_MGH", "q_mean_MGH", "latest_MGH", "sd_MGH", "aac_MGH", "daac_MGH", "fpos_MGH", "fneg_MGH", "sum_last_6h_MGH", "pos_run_MGH", "neg_run_MGH", "max_MGH", "posi_max_MGH", "min_MGH", "posi_min_MGH",
+        "length_MGV", "mean_MGV", "w_mean_MGV", "q_mean_MGV", "latest_MGV", "sd_MGV", "aac_MGV", "daac_MGV", "fpos_MGV", "fneg_MGV", "sum_last_6h_MGV", "pos_run_MGV", "neg_run_MGV", "max_MGV", "posi_max_MGV", "min_MGV", "posi_min_MGV",
+        "length_TA", "mean_TA", "w_mean_TA", "q_mean_TA", "latest_TA", "sd_TA", "aac_TA", "daac_TA", "fpos_TA", "fneg_TA", "sum_last_6h_TA", "pos_run_TA", "neg_run_TA", "max_TA", "posi_max_TA", "min_TA", "posi_min_TA",
+        "length_MIA", "mean_MIA", "w_mean_MIA", "q_mean_MIA", "latest_MIA", "sd_MIA", "aac_MIA", "daac_MIA", "fpos_MIA", "fneg_MIA", "sum_last_6h_MIA", "pos_run_MIA", "neg_run_MIA", "max_MIA", "posi_max_MIA", "min_MIA", "posi_min_MIA",
+        "length_MPMFE", "mean_MPMFE", "w_mean_MPMFE", "q_mean_MPMFE", "latest_MPMFE", "sd_MPMFE", "aac_MPMFE", "daac_MPMFE", "fpos_MPMFE", "fneg_MPMFE", "sum_last_6h_MPMFE", "pos_run_MPMFE", "neg_run_MPMFE", "max_MPMFE", "posi_max_MPMFE", "min_MPMFE", "posi_min_MPMFE",
+        "length_MSA", "mean_MSA", "w_mean_MSA", "q_mean_MSA", "latest_MSA", "sd_MSA", "aac_MSA", "daac_MSA", "fpos_MSA", "fneg_MSA", "sum_last_6h_MSA", "pos_run_MSA", "neg_run_MSA", "max_MSA", "posi_max_MSA", "min_MSA", "posi_min_MSA",
+        "length_FAS", "mean_FAS", "w_mean_FAS", "q_mean_FAS", "latest_FAS", "sd_FAS", "aac_FAS", "daac_FAS", "fpos_FAS", "fneg_FAS", "sum_last_6h_FAS", "pos_run_FAS", "neg_run_FAS", "max_FAS", "posi_max_FAS", "min_FAS", "posi_min_FAS",
+        "length_MVCD", "mean_MVCD", "w_mean_MVCD", "q_mean_MVCD", "latest_MVCD", "sd_MVCD", "aac_MVCD", "daac_MVCD", "fpos_MVCD", "fneg_MVCD", "sum_last_6h_MVCD", "pos_run_MVCD", "neg_run_MVCD", "max_MVCD", "posi_max_MVCD", "min_MVCD", "posi_min_MVCD",
+        "length_UMF", "mean_UMF", "w_mean_UMF", "q_mean_UMF", "latest_UMF", "sd_UMF", "aac_UMF", "daac_UMF", "fpos_UMF", "fneg_UMF", "sum_last_6h_UMF", "pos_run_UMF", "neg_run_UMF", "max_UMF", "posi_max_UMF", "min_UMF", "posi_min_UMF",
+        "length_TUCA", "mean_TUCA", "w_mean_TUCA", "q_mean_TUCA", "latest_TUCA", "sd_TUCA", "aac_TUCA", "daac_TUCA", "fpos_TUCA", "fneg_TUCA", "sum_last_6h_TUCA", "pos_run_TUCA", "neg_run_TUCA", "max_TUCA", "posi_max_TUCA", "min_TUCA", "posi_min_TUCA",
+        "length_TPED", "mean_TPED", "w_mean_TPED", "q_mean_TPED", "latest_TPED", "sd_TPED", "aac_TPED", "daac_TPED", "fpos_TPED", "fneg_TPED", "sum_last_6h_TPED", "pos_run_TPED", "neg_run_TPED", "max_TPED", "posi_max_TPED", "min_TPED", "posi_min_TPED",
+        "length_TUCH", "mean_TUCH", "w_mean_TUCH", "q_mean_TUCH", "latest_TUCH", "sd_TUCH", "aac_TUCH", "daac_TUCH", "fpos_TUCH", "fneg_TUCH", "sum_last_6h_TUCH", "pos_run_TUCH", "neg_run_TUCH", "max_TUCH", "posi_max_TUCH", "min_TUCH", "posi_min_TUCH",
+        "length_AVCH", "mean_AVCH", "w_mean_AVCH", "q_mean_AVCH", "latest_AVCH", "sd_AVCH", "aac_AVCH", "daac_AVCH", "fpos_AVCH", "fneg_AVCH", "sum_last_6h_AVCH", "pos_run_AVCH", "neg_run_AVCH", "max_AVCH", "posi_max_AVCH", "min_AVCH", "posi_min_AVCH",
+
+        "bin_label")
+    
+    writeFileName <- paste(train_vec_data_dir,"17_feats_woZ_vect_bin_classes_Lookback_", as.character(l_iter), "_span_", as.character(s_iter),".csv", sep="")
+    
+    write.csv(data_df_l, file = writeFileName, sep = ",", col.names = colnames(data_df_l), row.names = FALSE)
+    
+    
+  }
+  
+}
+
+
+
